@@ -1,0 +1,30 @@
+timestamp: "28014012311"
+arch: ICE40
+fpga_info {
+  fpga_id: "ice40hx1k-vq100"
+  part_num: "ICE40HX1K-VQ100"
+  size: "1k"
+  ice40 {
+    type: "hx1k"
+    pack: "vq100"
+  }
+}
+environment {
+  platform_id: "windows-amd64"
+  is_windows: true
+  terminal_mode: FORCE_TERMINAL
+  theme_name: "light"
+  debug_level: 0
+  yosys_path: "C:\\Users\\jorda\\.apio\\packages\\oss-cad-suite\\share\\yosys"
+  trellis_path: "C:\\Users\\jorda\\.apio\\packages\\oss-cad-suite\\share\\trellis"
+}
+apio_env_params {
+  env_name: "default"
+  board_id: "go-board"
+  top_module: "bno055_top"
+}
+target {
+  upload {
+    programmer_cmd: "iceprog -d d:1/1 $SOURCE"
+  }
+}
