@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////////
 ////                                                             ////
-////  BNO055 I2C Read using Nandland Go Board                    ////
+////  BNO055 I2C Transaction using Nandland Go Board             ////
 ////  Modified from WISHBONE I2C Master controller               ////
 ////                                                             ////
 ////  Original Author: Richard Herveille                         ////
@@ -10,11 +10,12 @@
 
 `timescale 1ns / 10ps
 
-module bno055_read (
+module bno055_read_write (
     input wire          i_clk,
     input wire          i_rst,
-    input wire          i_start_read,
+    input wire [1:0]    i_opcode,               // start I2C read OR write operation; 0=off, 1=read, 2=write
     input wire [7:0]    i_reg_addr,
+    input wire [7:0]    i_tx_data,              // only for WR operation
     output reg [7:0]    o_reg_data = 8'h00,
     output reg          o_done = 1'b0,
     inout wire          io_sda,
@@ -60,15 +61,23 @@ reg [3:0] state = ST_IDLE;
 localparam ST_IDLE        = 4'd0; // init wait
 localparam ST_START       = 4'd1;
 localparam ST_START_WAIT  = 4'd2;
+
 localparam ST_WRITE_REG   = 4'd3;
-localparam ST_WRITE_WAIT  = 4'd4;
+localparam ST_WRITE_REG_WAIT  = 4'd4;
+
 localparam ST_RESTART     = 4'd5;
 localparam ST_RESTART_WAIT = 4'd6;
 localparam ST_READ_DATA   = 4'd7;
 localparam ST_READ_WAIT   = 4'd8;
-localparam ST_STOP        = 4'd9;
-localparam ST_STOP_WAIT   = 4'd10;
-localparam ST_DONE        = 4'd11;
+
+localparam ST_WRITE_DATA     = 4'd9;
+localparam ST_WRITE_DATA_WAIT = 4'd10;
+
+localparam ST_STOP        = 4'd11;
+localparam ST_STOP_WAIT   = 4'd12;
+localparam ST_DONE        = 4'd13;
+
+reg operation;
 
 always @(posedge i_clk) begin
     if (i_rst) begin
@@ -81,7 +90,8 @@ always @(posedge i_clk) begin
 
         case (state)
             ST_IDLE: begin
-                if (i_start_read) begin
+                if (i_opcode != 2'h0) begin
+                    operation <= i_opcode[0]; // opcode: 0b0[1] = read, 0b1[0] = write  
                     state <= ST_START;
                 end
             end
@@ -96,6 +106,7 @@ always @(posedge i_clk) begin
             ST_START_WAIT: begin
                 if (cmd_done) begin
                     state <= (!cmd_error) ? ST_WRITE_REG : ST_IDLE; // Error, retry
+                    // ((operation == 1'b1) ST_? : )
                 end
             end
 
@@ -103,15 +114,16 @@ always @(posedge i_clk) begin
                 cmd <= CMD_WRITE;
                 tx_data <= i_reg_addr;
                 cmd_valid <= 1'b1;
-                state <= ST_WRITE_WAIT;
+                state <= ST_WRITE_REG_WAIT;
             end
 
-            ST_WRITE_WAIT: begin
+            ST_WRITE_REG_WAIT: begin
                 if (cmd_done) begin
-                    state <= (!cmd_error) ? ST_RESTART : ST_IDLE;
+                    state <= (!cmd_error) ? ((operation == 1'b1) ? ST_RESTART : ST_WRITE_DATA) : ST_IDLE; // operation: 0b0[1] = read, 0b1[0] = write  
                 end
             end
-
+            
+            /** READ OPERATION ONLY STATES **/
             ST_RESTART: begin
                 cmd <= CMD_START;
                 tx_data <= BNO055_ADDR_READ;
@@ -137,6 +149,22 @@ always @(posedge i_clk) begin
                     state <= ST_STOP;
                 end
             end
+            /** ********************* **/
+
+            /** WRITE OPERATION ONLY STATES **/
+            ST_WRITE_DATA: begin
+                cmd <= CMD_WRITE;
+                tx_data <= i_tx_data;
+                cmd_valid <= 1'b1;
+                state <= ST_WRITE_DATA_WAIT;
+            end
+
+            ST_WRITE_DATA_WAIT: begin
+                if (cmd_done) begin
+                    state <= (!cmd_error) ? ST_STOP : ST_IDLE;
+                end
+            end
+            /** ********************* **/
 
             ST_STOP: begin
                 cmd <= CMD_STOP;
