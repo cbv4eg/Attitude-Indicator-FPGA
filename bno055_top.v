@@ -23,7 +23,15 @@ module bno055_top (
     inout PMOD1,    // sda
     inout PMOD7,    // scl
     input RX,
-    output TX
+    output TX,
+    // 7-segment display outputs for orientation
+    output S1_A,
+    output S1_B,
+    output S1_C,
+    output S1_D,
+    output S1_E,
+    output S1_F,
+    output S1_G
 );
 
 // Debounce Switches
@@ -141,6 +149,20 @@ orientation_encoder #(
     .roll_raw(euler_roll),
     .pitch_raw(euler_pitch),
     .orientation(orientation)
+);
+
+/*** BIN DECODER FOR 7-SEGMENT DISPLAY ***/
+
+// Display orientation code (0-8) on 7-segment display
+SSD_Bin_Decoder orientation_display (
+    .bits(orientation),
+    .seg_A(S1_A),
+    .seg_B(S1_B),
+    .seg_C(S1_C),
+    .seg_D(S1_D),
+    .seg_E(S1_E),
+    .seg_F(S1_F),
+    .seg_G(S1_G)
 );
 
 /*** UART TRANSMISSION ***/

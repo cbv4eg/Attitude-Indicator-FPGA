@@ -26,24 +26,27 @@ reg signed [1:0] pitch_dir;  // -1, 0, or 1
 
 always @(*) begin
     // Determine roll direction
-    if (roll_raw > $signed(THRESHOLD))
+    // Using $signed() to ensure proper signed comparison
+    if ($signed(roll_raw) > $signed(THRESHOLD))
         roll_dir = 2'sd1;       // Right (positive)
-    else if (roll_raw < -$signed(THRESHOLD))
+    else if ($signed(roll_raw) < $signed(-THRESHOLD))
         roll_dir = -2'sd1;      // Left (negative)
     else
         roll_dir = 2'sd0;       // Neutral
 
     // Determine pitch direction
-    if (pitch_raw > $signed(THRESHOLD))
+    if ($signed(pitch_raw) > $signed(THRESHOLD))
         pitch_dir = 2'sd1;      // Up (positive)
-    else if (pitch_raw < -$signed(THRESHOLD))
+    else if ($signed(pitch_raw) < $signed(-THRESHOLD))
         pitch_dir = -2'sd1;     // Down (negative)
     else
         pitch_dir = 2'sd0;      // Neutral
 
     // Encode orientation based on combination of roll and pitch
+    // Python uses: orientation_map.get((roll_dir, pitch_dir), 0)
+    // So we concatenate as {roll_dir[1:0], pitch_dir[1:0]}
+    // Signed values: 01 = +1, 11 = -1, 00 = 0
     case ({roll_dir, pitch_dir})
-        // Format: {roll_dir[1:0], pitch_dir[1:0]}
         4'b00_00: orientation = 4'd0;  // Neutral (roll=0, pitch=0)
         4'b00_01: orientation = 4'd1;  // Up (roll=0, pitch=+1)
         4'b01_01: orientation = 4'd2;  // Up-Right (roll=+1, pitch=+1)
