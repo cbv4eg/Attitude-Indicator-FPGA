@@ -20,7 +20,6 @@
 module bno055_top (
     input CLK,      // Go Board clk
     input SW1,      // reset
-    input SW2,      // start next chip id read operation
     inout PMOD1,    // sda
     inout PMOD7,    // scl
     output S1_A,
@@ -49,12 +48,6 @@ Debounce_Filter_Edge SW1_debouncer(
     .i_CLK          (CLK),
     .i_Bouncy       (SW1),
     .o_Debounced    (Cleaned_SW1)
-);
-reg Cleaned_SW2;
-Debounce_Filter_Edge SW2_debouncer(
-    .i_CLK          (CLK),
-    .i_Bouncy       (SW2),
-    .o_Debounced    (Cleaned_SW2)
 );
 
 // BNO055 OPERATION STATE MACHINE: reset --> configure mode --> read continously 
@@ -159,59 +152,22 @@ Roll_Pitch_Encoder encoder (
     .o_Attitude     (attitude)
 );
 
-    // // Decode attitude to seven segment displays
-    // SSD_Decoder ssd_display (
-    //     .i_Attitude     (attitude),
-    //     .seg_A1         (S1_A),
-    //     .seg_B1         (S1_B),
-    //     .seg_C1         (S1_C),
-    //     .seg_D1         (S1_D),
-    //     .seg_E1         (S1_E),
-    //     .seg_F1         (S1_F),
-    //     .seg_G1         (S1_G),
-    //     .seg_A2         (S2_A),
-    //     .seg_B2         (S2_B),
-    //     .seg_C2         (S2_C),
-    //     .seg_D2         (S2_D),
-    //     .seg_E2         (S2_E),
-    //     .seg_F2         (S2_F),
-    //     .seg_G2         (S2_G)
-    // );
-
-// Counter to cycle through bytes 0-3
-reg [1:0] display_select;
-Mod_N_Counter #(.WIDTH(2), .RESET_VALUE(2'd3)) ID_reg_counter (
-    .reset(Cleaned_SW1),
-    .clock(Cleaned_SW2),
-    .o_Counter(display_select)
+// Decode attitude to seven segment displays
+SSD_Euler_Decoder ssd_display (
+    .i_Attitude     (attitude),
+    .seg_A1         (S1_A),
+    .seg_B1         (S1_B),
+    .seg_C1         (S1_C),
+    .seg_D1         (S1_D),
+    .seg_E1         (S1_E),
+    .seg_F1         (S1_F),
+    .seg_G1         (S1_G),
+    .seg_A2         (S2_A),
+    .seg_B2         (S2_B),
+    .seg_C2         (S2_C),
+    .seg_D2         (S2_D),
+    .seg_E2         (S2_E),
+    .seg_F2         (S2_F),
+    .seg_G2         (S2_G)
 );
-
-// Select which byte to display
-reg [7:0] display_byte;
-always @(*) begin
-    case (display_select)
-        2'd0: display_byte = euler_data[0];  // Roll LSB
-        2'd1: display_byte = euler_data[1];  // Roll MSB
-        2'd2: display_byte = euler_data[2];  // Pitch LSB
-        2'd3: display_byte = euler_data[3];  // Pitch MSB
-        default: display_byte = 8'h00;
-    endcase
-end
-
-// Display selected byte in hex on seven segment displays
-SSD_Bin_Decoder hex_display_upper(
-    .bits(display_byte[7:4]),
-    .seg_A(S1_A), .seg_B(S1_B), .seg_C(S1_C), .seg_D(S1_D), 
-    .seg_E(S1_E), .seg_F(S1_F), .seg_G(S1_G)
-);
-
-SSD_Bin_Decoder hex_display_lower(
-    .bits(display_byte[3:0]),
-    .seg_A(S2_A), .seg_B(S2_B), .seg_C(S2_C), .seg_D(S2_D), 
-    .seg_E(S2_E), .seg_F(S2_F), .seg_G(S2_G)
-);
-
-// Status LEDs show current byte being read
-assign {LED1, LED2, LED3, LED4} = {attitude};
-
 endmodule

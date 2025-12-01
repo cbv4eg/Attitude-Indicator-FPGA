@@ -25,10 +25,10 @@ module SSD_Euler_Decoder (
     output          seg_G2);
 
     /*** Logic minimization, for each of (7) LED segments ***/ 
-    wire c3 = bits[3]; // D = isZero(pitch)
-    wire c2 = bits[2]; // C = isZero(roll)
-    wire c1 = bits[1]; // B = sgn(pitch)
-    wire c0 = bits[0]; // A = sgn(roll)
+    wire c3 = i_Attitude[3]; // D = isZero(pitch)
+    wire c2 = i_Attitude[2]; // C = isZero(roll)
+    wire c1 = i_Attitude[1]; // B = sgn(pitch)
+    wire c0 = i_Attitude[0]; // A = sgn(roll)
 
     // Have to add negation to each logic expression to account for common anode tech 
     assign seg_A1 = ~(~c0 & c1 & ~c3);
