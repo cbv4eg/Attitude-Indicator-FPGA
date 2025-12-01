@@ -7,7 +7,7 @@
     common anode LED segments: 0 = ON (physically, BUT IGNORE IN THE CONTEXT OF CODE)
 ******************************************************************************/
 
-module SSD_Decoder (
+module SSD_Euler_Decoder (
     input  [3:0]    i_Attitude, // [sgn(roll), sgn(pitch), isZero(roll), isZero(pitch)]
     output          seg_A1,
     output          seg_B1,

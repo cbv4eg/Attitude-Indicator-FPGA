@@ -10,7 +10,7 @@ module Roll_Pitch_Encoder (
     input   [15:0]   i_Pitch_Raw,
     output  [3:0]    o_Attitude);
 
-    localparam DEG_THRESHOLD = 11'd10;
+    localparam DEG_THRESHOLD = 16'd10;
     /*
     // determine sign; 0:pos, 1:neg
     function sgn;
@@ -31,8 +31,8 @@ module Roll_Pitch_Encoder (
     /* ATTITUDE OUTPUT [sgn(roll), sgn(pitch), isZero(roll), isZero(pitch)] */
     
     // Output signs; 0:pos, 1:neg
-    assign o_Attitude[3] = roll_deg[15]; 
-    assign o_Attitude[2] = pitch_deg[15];
+    assign o_Attitude[3] = i_Roll_Raw[15]; 
+    assign o_Attitude[2] = i_Pitch_Raw[15];
     // Converted values in deg (divide by 16)
     assign o_Attitude[1] = ((i_Roll_Raw >> 4) > DEG_THRESHOLD) ? 1'b0: 1'b1;
     assign o_Attitude[0] = ((i_Pitch_Raw >> 4) > DEG_THRESHOLD) ? 1'b0: 1'b1;
