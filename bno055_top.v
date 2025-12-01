@@ -8,6 +8,7 @@
 ////                                                             ////
 /////////////////////////////////////////////////////////////////////
 
+// Opcodes
 `define STOP 0
 `define READ 1
 `define WRITE 2
@@ -20,7 +21,7 @@
 module bno055_top (
     input CLK,      // Go Board clk
     input SW1,      // reset
-    input SW2,      // start next chip id read operation
+    //input SW2,      // start next rd/wr operation
     inout PMOD1,    // sda
     inout PMOD7,    // scl
     output S1_A,
@@ -50,14 +51,16 @@ Debounce_Filter_Edge SW1_debouncer(
     .i_Bouncy       (SW1),
     .o_Debounced    (Cleaned_SW1)
 );
+/*
 reg Cleaned_SW2;
 Debounce_Filter_Edge SW2_debouncer(
     .i_CLK          (CLK),
     .i_Bouncy       (SW2),
     .o_Debounced    (Cleaned_SW2)
 );
+*/
 
-// BNO055 OPERATION STATE MACHINE: reset --> configure mode --> read continously 
+/*** BNO055 OPERATION STATE MACHINE ***/
 reg [3:0] state = ST_CONFIG;
 localparam
     ST_CONFIG = 1,
@@ -91,6 +94,7 @@ bno055_read_write transaction (
     .io_scl         (PMOD7)
 );
 
+// reset --> configure mode --> read continously 
 always @(posedge CLK) begin
     if (Cleaned_SW1) begin
         state <= ST_CONFIG;
@@ -109,7 +113,7 @@ always @(posedge CLK) begin
         ST_CONFIG_WAIT: begin
             opcode <= `STOP; // 0
             if (op_done)
-                state <= ST_READ_BYTE;   // 7ms delay
+                state <= ST_READ_BYTE;   // 7ms
         end
 
         ST_READ_BYTE: begin
