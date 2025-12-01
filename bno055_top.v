@@ -22,24 +22,8 @@ module bno055_top (
     input SW1,      // reset
     inout PMOD1,    // sda
     inout PMOD7,    // scl
-    output S1_A,
-    output S1_B,
-    output S1_C,
-    output S1_D,
-    output S1_E,
-    output S1_F,
-    output S1_G,
-    output S2_A,
-    output S2_B,
-    output S2_C,
-    output S2_D,
-    output S2_E,
-    output S2_F,
-    output S2_G,
-    output LED1,
-    output LED2,
-    output LED3,
-    output LED4
+    input RX,
+    output TX
 );
 
 // Debounce Switches
@@ -65,7 +49,7 @@ wire [7:0] current_addr;
 reg [1:0] byte_count = 2'd0;
 
 // Current register address: 0x1A + byte_count
-assign current_addr = 8'h1A + {6'h0, byte_count};
+assign current_addr = 8'h1C + {6'h0, byte_count};
 
 // I2C transaction variables
 reg [1:0] opcode;
@@ -144,30 +128,149 @@ wire [15:0] euler_pitch;    // 0x1E (LSB), 0x1F (MSB) - EUL_DATA_Z
 assign euler_roll    = {euler_data[1], euler_data[0]};  // [MSB, LSB]
 assign euler_pitch   = {euler_data[3], euler_data[2]};  // [MSB, LSB]
 
-// Encode roll and pitch into 4-bit attitude
-wire [3:0] attitude;
-Roll_Pitch_Encoder encoder (
-    .i_Roll_Raw     (euler_roll),
-    .i_Pitch_Raw    (euler_pitch),
-    .o_Attitude     (attitude)
+wire [15:0] roll_deg = euler_roll >> 4;
+wire [15:0] pitch_deg = euler_pitch >> 4;
+
+/*** ORIENTATION ENCODER ***/
+
+wire [3:0] orientation;  // 0-8 orientation code
+
+orientation_encoder #(
+    .THRESHOLD(16'd400)  // Raw threshold for tilt detection
+) encoder (
+    .roll_raw(euler_roll),
+    .pitch_raw(euler_pitch),
+    .orientation(orientation)
 );
 
-// Decode attitude to seven segment displays
-SSD_Euler_Decoder ssd_display (
-    .i_Attitude     (attitude),
-    .seg_A1         (S1_A),
-    .seg_B1         (S1_B),
-    .seg_C1         (S1_C),
-    .seg_D1         (S1_D),
-    .seg_E1         (S1_E),
-    .seg_F1         (S1_F),
-    .seg_G1         (S1_G),
-    .seg_A2         (S2_A),
-    .seg_B2         (S2_B),
-    .seg_C2         (S2_C),
-    .seg_D2         (S2_D),
-    .seg_E2         (S2_E),
-    .seg_F2         (S2_F),
-    .seg_G2         (S2_G)
+/*** UART TRANSMISSION ***/
+
+// UART parameters for 115200 baud with 25MHz clock
+// CLKS_PER_BIT = Clock_Freq / Baud_Rate = 25000000 / 115200 = 217
+parameter CLKS_PER_BIT = 217;
+
+// UART transmission state machine
+reg [3:0] uart_state = 4'd0;
+localparam
+    UART_IDLE = 4'd0,
+    UART_SEND_START = 4'd1,
+    UART_WAIT_START = 4'd2,
+    UART_SEND_ROLL_LSB = 4'd3,
+    UART_WAIT_ROLL_LSB = 4'd4,
+    UART_SEND_ROLL_MSB = 4'd5,
+    UART_WAIT_ROLL_MSB = 4'd6,
+    UART_SEND_PITCH_LSB = 4'd7,
+    UART_WAIT_PITCH_LSB = 4'd8,
+    UART_SEND_PITCH_MSB = 4'd9,
+    UART_WAIT_PITCH_MSB = 4'd10,
+    UART_SEND_END = 4'd11,
+    UART_WAIT_END = 4'd12;
+
+reg [7:0] tx_byte;
+wire tx_done;
+wire tx_active;
+
+// Instantiate UART transmitter
+uart_tx #(
+    .CLKS_PER_BIT(CLKS_PER_BIT)
+) uart_transmitter (
+    .i_Clk(CLK),
+    .i_tx_byte(tx_byte),
+    .o_tx_active(tx_active),
+    .o_tx_serial(TX),
+    .o_tx_done(tx_done)
 );
+
+// Delay counter to wait between complete data packets
+reg [23:0] packet_delay = 24'd0;
+localparam PACKET_DELAY_MAX = 24'd2500000; // ~100ms at 25MHz
+
+// Flag to indicate we have valid data (at least one complete read cycle)
+reg data_valid = 1'b0;
+
+always @(posedge CLK) begin
+    if (Cleaned_SW1) begin
+        data_valid <= 1'b0;
+    end else if (state == ST_NEXT_BYTE && byte_count == 2'd3) begin
+        data_valid <= 1'b1;  // Mark data as valid after first complete read
+    end
+end
+
+// UART transmission control
+always @(posedge CLK) begin
+    if (Cleaned_SW1) begin
+        uart_state <= UART_IDLE;
+        packet_delay <= 24'd0;
+    end else begin
+        case(uart_state)
+            UART_IDLE: begin
+                if (data_valid) begin
+                    if (packet_delay < PACKET_DELAY_MAX) begin
+                        packet_delay <= packet_delay + 1;
+                    end else begin
+                        packet_delay <= 24'd0;
+                        uart_state <= UART_SEND_START;
+                    end
+                end
+            end
+
+            UART_SEND_START: begin
+                tx_byte <= 8'hAA;  // Start byte
+                uart_state <= UART_WAIT_START;
+            end
+
+            UART_WAIT_START: begin
+                if (tx_done) uart_state <= UART_SEND_ROLL_LSB;
+            end
+
+            UART_SEND_ROLL_LSB: begin
+                tx_byte <= euler_roll[7:0];  // Roll LSB
+                uart_state <= UART_WAIT_ROLL_LSB;
+            end
+
+            UART_WAIT_ROLL_LSB: begin
+                if (tx_done) uart_state <= UART_SEND_ROLL_MSB;
+            end
+
+            UART_SEND_ROLL_MSB: begin
+                tx_byte <= euler_roll[15:8];  // Roll MSB
+                uart_state <= UART_WAIT_ROLL_MSB;
+            end
+
+            UART_WAIT_ROLL_MSB: begin
+                if (tx_done) uart_state <= UART_SEND_PITCH_LSB;
+            end
+
+            UART_SEND_PITCH_LSB: begin
+                tx_byte <= euler_pitch[7:0];  // Pitch LSB
+                uart_state <= UART_WAIT_PITCH_LSB;
+            end
+
+            UART_WAIT_PITCH_LSB: begin
+                if (tx_done) uart_state <= UART_SEND_PITCH_MSB;
+            end
+
+            UART_SEND_PITCH_MSB: begin
+                tx_byte <= euler_pitch[15:8];  // Pitch MSB
+                uart_state <= UART_WAIT_PITCH_MSB;
+            end
+
+            UART_WAIT_PITCH_MSB: begin
+                if (tx_done) uart_state <= UART_SEND_END;
+            end
+
+            UART_SEND_END: begin
+                tx_byte <= 8'h55;  // End byte
+                uart_state <= UART_WAIT_END;
+            end
+
+            UART_WAIT_END: begin
+                if (tx_done) uart_state <= UART_IDLE;
+            end
+
+            default: uart_state <= UART_IDLE;
+        endcase
+    end
+end
+
 endmodule
